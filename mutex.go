@@ -7,25 +7,26 @@ import (
 	"time"
 
 	. "github.com/chefsgo/base"
-	"github.com/chefsgo/chef"
+	"github.com/chefsgo/log"
+	"github.com/chefsgo/mutex"
 	"github.com/chefsgo/util"
 
 	"github.com/gomodule/redigo/redis"
 )
 
 type (
-	redisMutexDriver  struct{}
-	redisMutexConnect struct {
+	redisDriver  struct{}
+	redisConnect struct {
 		mutex   sync.RWMutex
 		actives int64
 
 		name    string
-		config  chef.MutexConfig
-		setting redisMutexSetting
+		config  mutex.Config
+		setting redisSetting
 
 		client *redis.Pool
 	}
-	redisMutexSetting struct {
+	redisSetting struct {
 		Server   string //服务器地址，ip:端口
 		Password string //服务器auth密码
 		Database string //数据库
@@ -35,15 +36,15 @@ type (
 		Timeout time.Duration
 	}
 
-	redisMutexValue struct {
+	redisValue struct {
 		Value Any `json:"value"`
 	}
 )
 
 //连接
-func (driver *redisMutexDriver) Connect(name string, config chef.MutexConfig) (chef.MutexConnect, error) {
+func (driver *redisDriver) Connect(name string, config mutex.Config) (mutex.Connect, error) {
 	//获取配置信息
-	setting := redisMutexSetting{
+	setting := redisSetting{
 		Server: "127.0.0.1:6379", Password: "", Database: "",
 		Idle: 30, Active: 100, Timeout: 240,
 	}
@@ -76,19 +77,19 @@ func (driver *redisMutexDriver) Connect(name string, config chef.MutexConfig) (c
 		}
 	}
 
-	return &redisMutexConnect{
+	return &redisConnect{
 		name: name, config: config, setting: setting,
 	}, nil
 }
 
 //打开连接
-func (connect *redisMutexConnect) Open() error {
+func (connect *redisConnect) Open() error {
 	connect.client = &redis.Pool{
 		MaxIdle: connect.setting.Idle, MaxActive: connect.setting.Active, IdleTimeout: connect.setting.Timeout,
 		Dial: func() (redis.Conn, error) {
 			c, err := redis.Dial("tcp", connect.setting.Server)
 			if err != nil {
-				chef.Warning("session.redis.dial", err)
+				log.Warning("session.redis.dial", err)
 				return nil, err
 			}
 
@@ -96,7 +97,7 @@ func (connect *redisMutexConnect) Open() error {
 			if connect.setting.Password != "" {
 				if _, err := c.Do("AUTH", connect.setting.Password); err != nil {
 					c.Close()
-					chef.Warning("session.redis.auth", err)
+					log.Warning("session.redis.auth", err)
 					return nil, err
 				}
 			}
@@ -104,7 +105,7 @@ func (connect *redisMutexConnect) Open() error {
 			if connect.setting.Database != "" {
 				if _, err := c.Do("SELECT", connect.setting.Database); err != nil {
 					c.Close()
-					chef.Warning("session.redis.select", err)
+					log.Warning("session.redis.select", err)
 					return nil, err
 				}
 			}
@@ -130,7 +131,7 @@ func (connect *redisMutexConnect) Open() error {
 }
 
 //关闭连接
-func (connect *redisMutexConnect) Close() error {
+func (connect *redisConnect) Close() error {
 	if connect.client != nil {
 		if err := connect.client.Close(); err != nil {
 			return err
@@ -139,7 +140,7 @@ func (connect *redisMutexConnect) Close() error {
 	return nil
 }
 
-func (connect *redisMutexConnect) Lock(key string, expiry time.Duration) error {
+func (connect *redisConnect) Lock(key string, expiry time.Duration) error {
 	if connect.client == nil {
 		return errors.New("连接失败")
 	}
@@ -167,7 +168,7 @@ func (connect *redisMutexConnect) Lock(key string, expiry time.Duration) error {
 
 	return nil
 }
-func (connect *redisMutexConnect) Unlock(key string) error {
+func (connect *redisConnect) Unlock(key string) error {
 	if connect.client == nil {
 		return errors.New("连接失败")
 	}
@@ -181,4 +182,4 @@ func (connect *redisMutexConnect) Unlock(key string) error {
 	return nil
 }
 
-//-------------------- redisMutexBase end -------------------------
+//-------------------- redisBase end -------------------------

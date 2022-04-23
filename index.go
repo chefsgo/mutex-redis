@@ -1,13 +1,13 @@
 package mutex_redis
 
 import (
-	"github.com/chefsgo/chef"
+	"github.com/chefsgo/mutex"
 )
 
-func Driver() chef.MutexDriver {
-	return &redisMutexDriver{}
+func Driver() mutex.Driver {
+	return &redisDriver{}
 }
 
 func init() {
-	chef.Register("redis", Driver())
+	mutex.Register("redis", Driver())
 }
